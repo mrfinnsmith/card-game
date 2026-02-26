@@ -17,6 +17,7 @@ node_modules/
 # Build outputs
 build/
 dist/
+coverage/
 *.tsbuildinfo
 
 # Local tooling
