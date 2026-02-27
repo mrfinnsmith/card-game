@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useRef } from 'react'
 import { createStore, useStore } from 'zustand'
+import { ROWS } from '@/lib/terminology'
 import type { GameState, PlayerState } from '@/types/game'
 
 type GameStore = ReturnType<typeof createGameStore>
@@ -11,7 +12,11 @@ function createPlayerState(): PlayerState {
     hand: [],
     deck: [],
     discard: [],
-    board: { melee: [], ranged: [], siege: [] },
+    board: {
+      melee: { type: ROWS.MELEE, cards: [], warCry: false },
+      ranged: { type: ROWS.RANGED, cards: [], warCry: false },
+      siege: { type: ROWS.SIEGE, cards: [], warCry: false },
+    },
     gems: 2,
     passed: false,
     leaderAbilityUsed: false,

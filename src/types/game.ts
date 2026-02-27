@@ -45,10 +45,16 @@ export interface WeatherCard {
 
 export type Card = UnitCard | SpecialCard | WeatherCard
 
+export interface RowState {
+  type: RowType
+  cards: UnitCard[]
+  warCry: boolean
+}
+
 export interface PlayerRow {
-  melee: UnitCard[]
-  ranged: UnitCard[]
-  siege: UnitCard[]
+  melee: RowState
+  ranged: RowState
+  siege: RowState
 }
 
 export interface PlayerState {
