@@ -1,8 +1,8 @@
 import { ABILITIES, FACTIONS, ROWS, WEATHER } from '@/lib/terminology'
 
-export type RowType = typeof ROWS[keyof typeof ROWS]
-export type FactionId = typeof FACTIONS[keyof typeof FACTIONS] | 'Neutral'
-export type WeatherType = typeof WEATHER[keyof typeof WEATHER]
+export type RowType = (typeof ROWS)[keyof typeof ROWS]
+export type FactionId = (typeof FACTIONS)[keyof typeof FACTIONS] | 'Neutral'
+export type WeatherType = (typeof WEATHER)[keyof typeof WEATHER]
 
 export type UnitAbility =
   | typeof ABILITIES.HERO
@@ -26,6 +26,7 @@ export interface UnitCard {
   baseStrength: number
   ability: UnitAbility | null
   isHero: boolean
+  rallyGroup: string | null
 }
 
 export interface SpecialCard {
