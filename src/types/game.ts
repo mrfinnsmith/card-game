@@ -16,7 +16,7 @@ export type UnitAbility =
   | typeof ABILITIES.ROW_SCORCH
   | typeof ABILITIES.WAR_CRY
 
-export type SelectionMode = 'default' | 'medic' | 'decoy' | 'agile' | 'mulligan'
+export type SelectionMode = 'default' | 'medic' | 'decoy' | 'agile' | 'mulligan' | 'warCry'
 
 export interface UnitCard {
   id: string
