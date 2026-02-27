@@ -25,6 +25,7 @@ function deckCard(id: string): UnitCard {
 function emptyPlayer(overrides: Partial<PlayerState> = {}): PlayerState {
   const emptyRow = (type: (typeof ROWS)[keyof typeof ROWS]) => ({ type, cards: [], warCry: false })
   return {
+    faction: 'Faction A' as const,
     hand: [],
     deck: [],
     discard: [],

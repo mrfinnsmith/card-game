@@ -1,11 +1,5 @@
-import { ROWS } from '@/lib/terminology'
-import type { GameState, PlayerRow, PlayerState, UnitCard } from '@/types/game'
-
-const ROW_KEY: Record<string, keyof PlayerRow> = {
-  [ROWS.MELEE]: 'melee',
-  [ROWS.RANGED]: 'ranged',
-  [ROWS.SIEGE]: 'siege',
-}
+import type { GameState, PlayerState, UnitCard } from '@/types/game'
+import { ROW_KEY } from '../rows'
 
 export function resolveInfiltrator(
   state: GameState,
@@ -23,7 +17,7 @@ export function resolveInfiltrator(
 
   const opponent = state.players[opponentIndex]
   const rowKey = ROW_KEY[card.row]
-  const opponentBoard: PlayerRow = {
+  const opponentBoard = {
     ...opponent.board,
     [rowKey]: {
       ...opponent.board[rowKey],

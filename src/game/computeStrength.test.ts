@@ -38,6 +38,7 @@ function gameState(weatherCards: WeatherCard[] = []): GameState {
     warCry: false,
   })
   const emptyPlayer = {
+    faction: 'Faction A' as const,
     hand: [],
     deck: [],
     discard: [],

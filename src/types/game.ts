@@ -2,6 +2,7 @@ import { ABILITIES, FACTIONS, ROWS, WEATHER } from '@/lib/terminology'
 
 export type RowType = (typeof ROWS)[keyof typeof ROWS]
 export type FactionId = (typeof FACTIONS)[keyof typeof FACTIONS] | 'Neutral'
+export type PlayerFaction = (typeof FACTIONS)[keyof typeof FACTIONS]
 export type WeatherType = (typeof WEATHER)[keyof typeof WEATHER]
 
 export type UnitAbility =
@@ -58,6 +59,7 @@ export interface PlayerRow {
 }
 
 export interface PlayerState {
+  faction: PlayerFaction
   hand: Card[]
   deck: Card[]
   discard: Card[]

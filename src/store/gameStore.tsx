@@ -2,13 +2,14 @@
 
 import { createContext, useContext, useRef } from 'react'
 import { createStore, useStore } from 'zustand'
-import { ROWS } from '@/lib/terminology'
+import { FACTIONS, ROWS } from '@/lib/terminology'
 import type { GameState, PlayerState } from '@/types/game'
 
 type GameStore = ReturnType<typeof createGameStore>
 
-function createPlayerState(): PlayerState {
+function createPlayerState(faction = FACTIONS.A): PlayerState {
   return {
+    faction,
     hand: [],
     deck: [],
     discard: [],
