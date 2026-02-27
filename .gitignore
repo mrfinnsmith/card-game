@@ -23,6 +23,8 @@ coverage/
 # Local tooling
 .claude/
 CLAUDE.md
+.gemini/
+GEMINI.md
 
 # Misc
 .DS_Store
