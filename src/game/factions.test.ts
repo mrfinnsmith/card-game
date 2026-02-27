@@ -49,6 +49,8 @@ function gameState(p0: PlayerState, p1: PlayerState): GameState {
     round: 1,
     activePlayer: 0,
     selectionMode: 'default',
+    pendingOptions: [],
+    randomRestoration: false,
   }
 }
 

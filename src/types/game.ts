@@ -75,4 +75,6 @@ export interface GameState {
   round: number
   activePlayer: 0 | 1
   selectionMode: SelectionMode
+  pendingOptions: UnitCard[]
+  randomRestoration: boolean
 }

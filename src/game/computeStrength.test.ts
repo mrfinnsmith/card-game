@@ -57,6 +57,8 @@ function gameState(weatherCards: WeatherCard[] = []): GameState {
     round: 1,
     activePlayer: 0,
     selectionMode: 'default',
+    pendingOptions: [],
+    randomRestoration: false,
   }
 }
 

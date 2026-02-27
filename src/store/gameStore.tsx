@@ -30,6 +30,8 @@ const initialState: GameState = {
   round: 1,
   activePlayer: 0,
   selectionMode: 'default',
+  pendingOptions: [],
+  randomRestoration: false,
 }
 
 function createGameStore() {
