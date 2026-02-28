@@ -1,8 +1,10 @@
 import { ROWS } from '@/lib/terminology'
 import type { GameState, RowType } from '@/types/game'
 import { completeSelection, endRound, isRoundOver } from '@/game/stateMachine'
-import { applyMove, getAvailableMoves, getScore, isTerminal } from './adapter'
+import { applyMove, getAvailableMoves, getScore as defaultGetScore, isTerminal } from './adapter'
 import type { Move } from './adapter'
+
+type ScoreFn = (state: GameState, playerIndex: 0 | 1) => number
 
 // ---- Types ----
 
@@ -121,6 +123,7 @@ function runIteration(
   state: GameState,
   playerIndex: 0 | 1,
   rng: () => number,
+  scoreFn: ScoreFn,
 ): void {
   const path: Array<{ node: MCTSNode; key: string }> = []
   let node = root
@@ -175,7 +178,7 @@ function runIteration(
     depth++
   }
 
-  const score = getScore(rs, playerIndex)
+  const score = scoreFn(rs, playerIndex)
 
   // Backpropagation (scores always stored from playerIndex's perspective)
   root.visits++
@@ -194,13 +197,14 @@ export function ismcts(
   playerIndex: 0 | 1,
   timeBudgetMs: number,
   rng = Math.random,
+  scoreFn: ScoreFn = defaultGetScore,
 ): Move {
   const root = createNode()
   const deadline = Date.now() + timeBudgetMs
 
   while (Date.now() < deadline) {
     const det = determinize(state, playerIndex, rng)
-    runIteration(root, det, playerIndex, rng)
+    runIteration(root, det, playerIndex, rng, scoreFn)
   }
 
   const moves = getAvailableMoves(state, playerIndex)
