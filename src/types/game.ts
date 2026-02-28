@@ -17,7 +17,18 @@ export type UnitAbility =
   | typeof ABILITIES.ROW_SCORCH
   | typeof ABILITIES.WAR_CRY
 
-export type SelectionMode = 'default' | 'medic' | 'decoy' | 'agile' | 'mulligan' | 'warCry'
+export type SelectionMode =
+  | 'default'
+  | 'medic'
+  | 'decoy'
+  | 'agile'
+  | 'mulligan'
+  | 'warCry'
+  | 'leaderB4'
+  | 'leaderD2'
+  | 'leaderD4discard'
+  | 'leaderD4draw'
+  | 'leaderD5'
 
 export interface UnitCard {
   id: string
@@ -82,10 +93,12 @@ export interface GameState {
   activePlayer: 0 | 1
   selectionMode: SelectionMode
   pendingOptions: UnitCard[]
+  pendingLeaderD4Discards?: string[]
   randomRestoration: boolean
   leaderD1Active: boolean
   mulligansUsed: [number, number]
   mulliganedCardIds: [string[], string[]]
   mulligansConfirmed: [boolean, boolean]
   roundWins: [number, number]
+  roundScores?: [number, number][]
 }

@@ -13,6 +13,11 @@ export interface SelectionOverlayProps {
   onWarCrySelect: (row: RowType) => void
   onMulliganSwap: (cardId: string) => void
   onMulliganConfirm: () => void
+  onLeaderB4Select: (cardId: string) => void
+  onLeaderD2Select: (cardId: string) => void
+  onLeaderD4DiscardSelect: (cardId: string) => void
+  onLeaderD4DrawSelect: (cardId: string) => void
+  onLeaderD5Select: (cardId: string) => void
 }
 
 // ---- Shared subcomponents ----
@@ -59,7 +64,15 @@ function SelectableCard({
   )
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  children,
+  footer,
+}: {
+  title: string
+  children: React.ReactNode
+  footer?: React.ReactNode
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pb-4 bg-black/50">
       <div className="bg-white rounded-lg border border-gray-200 shadow-xl w-full max-w-2xl mx-4 max-h-[60vh] flex flex-col">
@@ -67,6 +80,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
           <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-4">{children}</div>
+        {footer && <div className="px-4 py-3 border-t border-gray-100 shrink-0">{footer}</div>}
       </div>
     </div>
   )
@@ -195,31 +209,89 @@ function MulliganPanel({
     )
   }
 
+  const footer = (
+    <div className="flex justify-end">
+      <button
+        onClick={onConfirm}
+        className="px-5 py-2 rounded-lg bg-green-600 text-white font-semibold text-sm hover:bg-green-700 transition-colors"
+      >
+        Confirm hand
+      </button>
+    </div>
+  )
+
   return (
-    <Panel title={`Mulligan: ${swapsLeft} swap${swapsLeft !== 1 ? 's' : ''} remaining`}>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-2">
-          {hand.map((card) => {
-            const alreadySwapped = mulliganedCardIds.includes(card.id)
-            const canSwap = !alreadySwapped && mulligansUsed < 2
-            return (
-              <SelectableCard
-                key={card.id}
-                card={card}
-                onClick={canSwap ? () => onSwap(card.id) : undefined}
-                disabled={!canSwap}
-              />
-            )
-          })}
-        </div>
-        <div className="flex justify-end pt-2 border-t border-gray-100">
-          <button
-            onClick={onConfirm}
-            className="px-5 py-2 rounded-lg bg-green-600 text-white font-semibold text-sm hover:bg-green-700 transition-colors"
-          >
-            Confirm hand
-          </button>
-        </div>
+    <Panel
+      title={`Mulligan: ${swapsLeft} swap${swapsLeft !== 1 ? 's' : ''} remaining`}
+      footer={footer}
+    >
+      <div className="flex flex-wrap gap-2">
+        {hand.map((card) => {
+          const alreadySwapped = mulliganedCardIds.includes(card.id)
+          const canSwap = !alreadySwapped && mulligansUsed < 2
+          return (
+            <SelectableCard
+              key={card.id}
+              card={card}
+              onClick={canSwap ? () => onSwap(card.id) : undefined}
+              disabled={!canSwap}
+            />
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+// ---- Leader ability panels ----
+
+function LeaderCardListPanel({
+  title,
+  options,
+  onSelect,
+}: {
+  title: string
+  options: Card[]
+  onSelect: (id: string) => void
+}) {
+  return (
+    <Panel title={title}>
+      <div className="flex flex-wrap gap-2">
+        {options.map((card) => (
+          <SelectableCard key={card.id} card={card} onClick={() => onSelect(card.id)} />
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+function LeaderD4DiscardPanel({
+  hand,
+  alreadySelected,
+  needed,
+  onSelect,
+}: {
+  hand: Card[]
+  alreadySelected: Set<string>
+  needed: number
+  onSelect: (id: string) => void
+}) {
+  return (
+    <Panel
+      title={`Leader ability: discard ${needed} more card${needed !== 1 ? 's' : ''} from hand`}
+    >
+      <div className="flex flex-wrap gap-2">
+        {hand.map((card) => {
+          const picked = alreadySelected.has(card.id)
+          return (
+            <SelectableCard
+              key={card.id}
+              card={card}
+              onClick={!picked ? () => onSelect(card.id) : undefined}
+              disabled={picked}
+            />
+          )
+        })}
       </div>
     </Panel>
   )
@@ -234,6 +306,11 @@ export function SelectionOverlay({
   onWarCrySelect,
   onMulliganSwap,
   onMulliganConfirm,
+  onLeaderB4Select,
+  onLeaderD2Select,
+  onLeaderD4DiscardSelect,
+  onLeaderD4DrawSelect,
+  onLeaderD5Select,
 }: SelectionOverlayProps) {
   const mode = useGameStore((s) => s.selectionMode)
   const pendingOptions = useGameStore((s) => s.pendingOptions)
@@ -242,6 +319,10 @@ export function SelectionOverlay({
   const mulliganedCardIds = useGameStore((s) => s.mulliganedCardIds[0])
   const mulliganConfirmed = useGameStore((s) => s.mulligansConfirmed[0])
   const playerBoard = useGameStore((s) => s.players[0].board)
+  const ownDiscard = useGameStore((s) => s.players[0].discard)
+  const ownDeck = useGameStore((s) => s.players[0].deck)
+  const opponentDiscard = useGameStore((s) => s.players[1].discard)
+  const pendingLeaderD4Discards = useGameStore((s) => s.pendingLeaderD4Discards ?? [])
 
   if (mode === 'default') return null
 
@@ -283,6 +364,54 @@ export function SelectionOverlay({
           onConfirm={onMulliganConfirm}
         />
       )
+    case 'leaderB4':
+      return (
+        <LeaderCardListPanel
+          title="Leader ability: take a card from opponent's discard"
+          options={opponentDiscard}
+          onSelect={onLeaderB4Select}
+        />
+      )
+    case 'leaderD2': {
+      const eligible = ownDiscard.filter((c): c is UnitCard => c.type === 'unit' && !c.isHero)
+      return (
+        <LeaderCardListPanel
+          title="Leader ability: restore a unit from your discard"
+          options={eligible}
+          onSelect={onLeaderD2Select}
+        />
+      )
+    }
+    case 'leaderD4discard': {
+      const alreadySelected = new Set(pendingLeaderD4Discards)
+      const needed = 2 - pendingLeaderD4Discards.length
+      return (
+        <LeaderD4DiscardPanel
+          hand={hand}
+          alreadySelected={alreadySelected}
+          needed={needed}
+          onSelect={onLeaderD4DiscardSelect}
+        />
+      )
+    }
+    case 'leaderD4draw':
+      return (
+        <LeaderCardListPanel
+          title="Leader ability: choose a card from your deck to draw"
+          options={ownDeck}
+          onSelect={onLeaderD4DrawSelect}
+        />
+      )
+    case 'leaderD5': {
+      const weatherOptions = ownDeck.filter((c) => c.type === 'weather')
+      return (
+        <LeaderCardListPanel
+          title="Leader ability: play a weather card from your deck"
+          options={weatherOptions}
+          onSelect={onLeaderD5Select}
+        />
+      )
+    }
     default:
       return null
   }

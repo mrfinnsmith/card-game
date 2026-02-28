@@ -31,6 +31,7 @@ const defaultInitialState: GameState = {
   activePlayer: 0,
   selectionMode: 'default',
   pendingOptions: [],
+  pendingLeaderD4Discards: [],
   randomRestoration: false,
   leaderD1Active: false,
   mulligansUsed: [0, 0],

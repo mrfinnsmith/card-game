@@ -9,6 +9,7 @@ import { FactionSelect } from '@/components/game/FactionSelect'
 import type { FactionSelection } from '@/components/game/FactionSelect'
 import { buildDeck, shuffleDeck } from '@/game/decks'
 import {
+  completeLeaderAbilitySelection,
   completeSelection,
   confirmMulligan,
   endRound,
@@ -19,13 +20,14 @@ import {
   pass,
   performMulligan,
   playCard,
+  useLeaderAbility as applyLeaderAbility,
 } from '@/game/stateMachine'
 import { applyMove } from '@/game/ai/adapter'
 import type { Move } from '@/game/ai/adapter'
 import type { Difficulty } from '@/game/ai/scoring'
 import { ROWS } from '@/lib/terminology'
 import { GameStoreProvider, useGameStore, useGameStoreApi } from '@/store/gameStore'
-import type { GameState, MatchResult, PlayerState, RowType } from '@/types/game'
+import type { GameState, MatchResult, PlayerState, RowType, UnitCard } from '@/types/game'
 
 // ---- helpers ----
 
@@ -57,6 +59,7 @@ function autoResolveAi(state: GameState): GameState {
   while (s.selectionMode !== 'default' && s.selectionMode !== 'mulligan') {
     const prev = s
     const active = s.activePlayer
+    const oppIndex: 0 | 1 = active === 0 ? 1 : 0
     switch (s.selectionMode) {
       case 'medic': {
         if (s.pendingOptions.length === 0) return s
@@ -82,6 +85,70 @@ function autoResolveAi(state: GameState): GameState {
         s = completeSelection(s, { mode: 'warCry', row }, active, Math.random)
         break
       }
+      case 'leaderB4': {
+        const oppDiscard = s.players[oppIndex].discard
+        const pick =
+          oppDiscard.length > 0 ? oppDiscard[Math.floor(Math.random() * oppDiscard.length)] : null
+        s = completeLeaderAbilitySelection(
+          s,
+          { mode: 'leaderB4', selectedCardId: pick?.id ?? '' },
+          active,
+          Math.random,
+        )
+        break
+      }
+      case 'leaderD2': {
+        const eligible = s.players[active].discard.filter(
+          (c): c is UnitCard => c.type === 'unit' && !c.isHero,
+        )
+        const pick =
+          eligible.length > 0 ? eligible[Math.floor(Math.random() * eligible.length)] : null
+        s = completeLeaderAbilitySelection(
+          s,
+          { mode: 'leaderD2', selectedCardId: pick?.id ?? '' },
+          active,
+          Math.random,
+        )
+        break
+      }
+      case 'leaderD4discard': {
+        const already = s.pendingLeaderD4Discards ?? []
+        const available = s.players[active].hand.filter((c) => !already.includes(c.id))
+        if (available.length === 0) return s
+        const pick = available[Math.floor(Math.random() * available.length)]
+        s = completeLeaderAbilitySelection(
+          s,
+          { mode: 'leaderD4discard', selectedCardId: pick.id },
+          active,
+          Math.random,
+        )
+        break
+      }
+      case 'leaderD4draw': {
+        const deck = s.players[active].deck
+        const pick = deck.length > 0 ? deck[Math.floor(Math.random() * deck.length)] : null
+        s = completeLeaderAbilitySelection(
+          s,
+          { mode: 'leaderD4draw', selectedCardId: pick?.id ?? '' },
+          active,
+          Math.random,
+        )
+        break
+      }
+      case 'leaderD5': {
+        const weatherCards = s.players[active].deck.filter((c) => c.type === 'weather')
+        const pick =
+          weatherCards.length > 0
+            ? weatherCards[Math.floor(Math.random() * weatherCards.length)]
+            : null
+        s = completeLeaderAbilitySelection(
+          s,
+          { mode: 'leaderD5', selectedCardId: pick?.id ?? '' },
+          active,
+          Math.random,
+        )
+        break
+      }
       default:
         return s
     }
@@ -95,10 +162,12 @@ function autoResolveAi(state: GameState): GameState {
 function ResultScreen({
   result,
   roundWins,
+  roundScores,
   onPlayAgain,
 }: {
   result: MatchResult
   roundWins: [number, number]
+  roundScores: [number, number][]
   onPlayAgain: () => void
 }) {
   const heading =
@@ -116,6 +185,15 @@ function ResultScreen({
             Opponent won {roundWins[1]} round{roundWins[1] !== 1 ? 's' : ''}
           </p>
         </div>
+        {roundScores.length > 0 && (
+          <div className="text-xs text-gray-400 space-y-0.5 pt-1 border-t border-gray-100">
+            {roundScores.map(([you, opp], i) => (
+              <p key={i}>
+                Round {i + 1}: {you} – {opp}
+              </p>
+            ))}
+          </div>
+        )}
         <button
           onClick={onPlayAgain}
           className="w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
@@ -134,7 +212,11 @@ const DIFFICULTY: Difficulty = 'medium'
 function GameScreen({
   onMatchEnd,
 }: {
-  onMatchEnd: (result: MatchResult, roundWins: [number, number]) => void
+  onMatchEnd: (
+    result: MatchResult,
+    roundWins: [number, number],
+    roundScores: [number, number][],
+  ) => void
 }) {
   const storeApi = useGameStoreApi()
   const state = useGameStore((s) => s)
@@ -163,7 +245,7 @@ function GameScreen({
         next = endRound(next, Math.random)
         if (isMatchOver(next)) {
           storeApi.setState(next)
-          onMatchEndRef.current(getMatchResult(next)!, next.roundWins)
+          onMatchEndRef.current(getMatchResult(next)!, next.roundWins, next.roundScores ?? [])
           return
         }
       }
@@ -195,10 +277,18 @@ function GameScreen({
       !aiThinkingRef.current &&
       workerRef.current
     ) {
+      // Auto-use AI leader ability before the main move.
+      if (!state.players[1].leaderAbilityUsed && state.players[1].leader) {
+        const leaderState = autoResolveAi(applyLeaderAbility(state, 1, Math.random))
+        if (leaderState.players[1].leaderAbilityUsed) {
+          storeApi.setState(leaderState)
+          return
+        }
+      }
       aiThinkingRef.current = true
       workerRef.current.postMessage({ state, playerIndex: 1, difficulty: DIFFICULTY })
     }
-  }, [state])
+  }, [state, storeApi])
 
   // Apply a state change, then check for round/match end.
   function applyAndAdvance(next: GameState) {
@@ -206,7 +296,7 @@ function GameScreen({
       next = endRound(next, Math.random)
       if (isMatchOver(next)) {
         storeApi.setState(next)
-        onMatchEndRef.current(getMatchResult(next)!, next.roundWins)
+        onMatchEndRef.current(getMatchResult(next)!, next.roundWins, next.roundScores ?? [])
         return
       }
     }
@@ -260,6 +350,72 @@ function GameScreen({
     storeApi.setState(confirmMulligan(stateRef.current, 0))
   }
 
+  function handleLeaderAbility() {
+    storeApi.setState(applyLeaderAbility(stateRef.current, 0, Math.random))
+  }
+
+  function handleLeaderB4Select(cardId: string) {
+    storeApi.setState(
+      completeLeaderAbilitySelection(
+        stateRef.current,
+        { mode: 'leaderB4', selectedCardId: cardId },
+        0,
+        Math.random,
+      ),
+    )
+  }
+
+  function handleLeaderD2Select(cardId: string) {
+    storeApi.setState(
+      completeLeaderAbilitySelection(
+        stateRef.current,
+        { mode: 'leaderD2', selectedCardId: cardId },
+        0,
+        Math.random,
+      ),
+    )
+  }
+
+  function handleLeaderD4DiscardSelect(cardId: string) {
+    storeApi.setState(
+      completeLeaderAbilitySelection(
+        stateRef.current,
+        { mode: 'leaderD4discard', selectedCardId: cardId },
+        0,
+        Math.random,
+      ),
+    )
+  }
+
+  function handleLeaderD4DrawSelect(cardId: string) {
+    storeApi.setState(
+      completeLeaderAbilitySelection(
+        stateRef.current,
+        { mode: 'leaderD4draw', selectedCardId: cardId },
+        0,
+        Math.random,
+      ),
+    )
+  }
+
+  function handleLeaderD5Select(cardId: string) {
+    storeApi.setState(
+      completeLeaderAbilitySelection(
+        stateRef.current,
+        { mode: 'leaderD5', selectedCardId: cardId },
+        0,
+        Math.random,
+      ),
+    )
+  }
+
+  const canUseLeader =
+    state.activePlayer === 0 &&
+    state.selectionMode === 'default' &&
+    !state.players[0].leaderAbilityUsed &&
+    !!state.players[0].leader &&
+    !isMatchOver(state)
+
   const canPass =
     state.activePlayer === 0 &&
     state.selectionMode === 'default' &&
@@ -286,6 +442,18 @@ function GameScreen({
           <PlayerHand onPlay={handlePlayCard} />
         </div>
         <button
+          onClick={handleLeaderAbility}
+          disabled={!canUseLeader}
+          className={[
+            'shrink-0 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors self-center',
+            canUseLeader
+              ? 'border-purple-300 bg-white text-purple-600 hover:bg-purple-50'
+              : 'border-gray-200 bg-gray-50 text-gray-300 cursor-default',
+          ].join(' ')}
+        >
+          Leader
+        </button>
+        <button
           onClick={handlePass}
           disabled={!canPass}
           className={[
@@ -306,6 +474,11 @@ function GameScreen({
         onWarCrySelect={handleWarCrySelect}
         onMulliganSwap={handleMulliganSwap}
         onMulliganConfirm={handleMulliganConfirm}
+        onLeaderB4Select={handleLeaderB4Select}
+        onLeaderD2Select={handleLeaderD2Select}
+        onLeaderD4DiscardSelect={handleLeaderD4DiscardSelect}
+        onLeaderD4DrawSelect={handleLeaderD4DrawSelect}
+        onLeaderD5Select={handleLeaderD5Select}
       />
     </div>
   )
@@ -319,6 +492,7 @@ export default function PlayPage() {
   const [phase, setPhase] = useState<Phase>('faction-select')
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null)
   const [roundWins, setRoundWins] = useState<[number, number]>([0, 0])
+  const [roundScores, setRoundScores] = useState<[number, number][]>([])
   const [initialGameState, setInitialGameState] = useState<GameState | null>(null)
 
   function handleFactionConfirm(selection: FactionSelection) {
@@ -328,16 +502,21 @@ export default function PlayPage() {
     setPhase('playing')
   }
 
-  const handleMatchEnd = useCallback((result: MatchResult, wins: [number, number]) => {
-    setMatchResult(result)
-    setRoundWins(wins)
-    setPhase('match-result')
-  }, [])
+  const handleMatchEnd = useCallback(
+    (result: MatchResult, wins: [number, number], scores: [number, number][]) => {
+      setMatchResult(result)
+      setRoundWins(wins)
+      setRoundScores(scores)
+      setPhase('match-result')
+    },
+    [],
+  )
 
   function handlePlayAgain() {
     setInitialGameState(null)
     setMatchResult(null)
     setRoundWins([0, 0])
+    setRoundScores([])
     setPhase('faction-select')
   }
 
@@ -346,7 +525,14 @@ export default function PlayPage() {
   }
 
   if (phase === 'match-result' && matchResult) {
-    return <ResultScreen result={matchResult} roundWins={roundWins} onPlayAgain={handlePlayAgain} />
+    return (
+      <ResultScreen
+        result={matchResult}
+        roundWins={roundWins}
+        roundScores={roundScores}
+        onPlayAgain={handlePlayAgain}
+      />
+    )
   }
 
   if (!initialGameState) return null

@@ -1,4 +1,4 @@
-import { ABILITIES, FACTIONS } from '@/lib/terminology'
+import { ABILITIES, FACTIONS, LEADERS } from '@/lib/terminology'
 import type {
   Card,
   GameState,
@@ -25,6 +25,28 @@ import {
   resolveWarCryUnit,
 } from './resolvers/warCry'
 import { resolveWeather } from './resolvers/weather'
+import {
+  leaderA1,
+  leaderA2,
+  leaderA3,
+  leaderA4,
+  leaderA5,
+  leaderB1,
+  leaderB2,
+  leaderB3,
+  leaderB4,
+  leaderB5,
+  leaderC1,
+  leaderC2,
+  leaderC3,
+  leaderC4,
+  leaderC5,
+  leaderD1,
+  leaderD2,
+  leaderD3,
+  leaderD4,
+  leaderD5,
+} from './leaders'
 import { ROW_KEY } from './rows'
 
 // ---- Helpers ----
@@ -196,6 +218,128 @@ export function completeSelection(
   return advanceTurn(resolved, playerIndex)
 }
 
+// ---- Leader ability ----
+
+export function useLeaderAbility(
+  state: GameState,
+  playerIndex: 0 | 1,
+  rng: () => number,
+): GameState {
+  const player = state.players[playerIndex]
+  if (player.leaderAbilityUsed) return state
+  if (state.activePlayer !== playerIndex) return state
+  if (state.selectionMode !== 'default') return state
+  if (!player.leader) return state
+
+  switch (player.leader) {
+    case LEADERS.A1:
+      return leaderA1(state, playerIndex)
+    case LEADERS.A2:
+      return leaderA2(state, playerIndex)
+    case LEADERS.A3:
+      return leaderA3(state, playerIndex)
+    case LEADERS.A4:
+      return leaderA4(state, playerIndex)
+    case LEADERS.A5:
+      return leaderA5(state, playerIndex)
+    case LEADERS.B1: {
+      const { state: next } = leaderB1(state, playerIndex, rng)
+      return next
+    }
+    case LEADERS.B2:
+      return leaderB2(state, playerIndex)
+    case LEADERS.B3:
+      return leaderB3(state, playerIndex)
+    case LEADERS.B4:
+      return { ...state, selectionMode: 'leaderB4' }
+    case LEADERS.B5:
+      return leaderB5(state, playerIndex)
+    case LEADERS.C1:
+      return leaderC1(state, playerIndex)
+    case LEADERS.C2:
+      return leaderC2(state, playerIndex)
+    case LEADERS.C3:
+      return leaderC3(state, playerIndex)
+    case LEADERS.C4:
+      return leaderC4(state, playerIndex)
+    case LEADERS.C5:
+      return leaderC5(state, playerIndex)
+    case LEADERS.D1:
+      return leaderD1(state, playerIndex)
+    case LEADERS.D2: {
+      if (state.randomRestoration) return leaderD2(state, playerIndex, '', rng)
+      const eligible = player.discard.filter((c): c is UnitCard => c.type === 'unit' && !c.isHero)
+      if (eligible.length === 0) return leaderD2(state, playerIndex, '', rng)
+      return { ...state, selectionMode: 'leaderD2' }
+    }
+    case LEADERS.D3:
+      return leaderD3(state, playerIndex)
+    case LEADERS.D4: {
+      if (player.hand.length === 0) return leaderD4(state, playerIndex, ['', ''], '')
+      return { ...state, selectionMode: 'leaderD4discard', pendingLeaderD4Discards: [] }
+    }
+    case LEADERS.D5: {
+      const weatherCards = player.deck.filter((c) => c.type === 'weather')
+      if (weatherCards.length === 0) return leaderD5(state, playerIndex, '')
+      return { ...state, selectionMode: 'leaderD5' }
+    }
+    default:
+      return state
+  }
+}
+
+export type LeaderSelectionCompletion =
+  | { mode: 'leaderB4'; selectedCardId: string }
+  | { mode: 'leaderD2'; selectedCardId: string }
+  | { mode: 'leaderD4discard'; selectedCardId: string }
+  | { mode: 'leaderD4draw'; selectedCardId: string }
+  | { mode: 'leaderD5'; selectedCardId: string }
+
+export function completeLeaderAbilitySelection(
+  state: GameState,
+  completion: LeaderSelectionCompletion,
+  playerIndex: 0 | 1,
+  rng: () => number,
+): GameState {
+  if (state.activePlayer !== playerIndex) return state
+
+  switch (completion.mode) {
+    case 'leaderB4':
+      return {
+        ...leaderB4(state, playerIndex, completion.selectedCardId),
+        selectionMode: 'default',
+      }
+    case 'leaderD2':
+      return {
+        ...leaderD2(state, playerIndex, completion.selectedCardId, rng),
+        selectionMode: 'default',
+      }
+    case 'leaderD4discard': {
+      const newDiscards = [...(state.pendingLeaderD4Discards ?? []), completion.selectedCardId]
+      if (newDiscards.length < 2) {
+        return { ...state, pendingLeaderD4Discards: newDiscards }
+      }
+      return { ...state, pendingLeaderD4Discards: newDiscards, selectionMode: 'leaderD4draw' }
+    }
+    case 'leaderD4draw': {
+      const discards = state.pendingLeaderD4Discards ?? []
+      const discardTuple: [string, string] = [discards[0] ?? '', discards[1] ?? '']
+      return {
+        ...leaderD4(state, playerIndex, discardTuple, completion.selectedCardId),
+        selectionMode: 'default',
+        pendingLeaderD4Discards: [],
+      }
+    }
+    case 'leaderD5':
+      return {
+        ...leaderD5(state, playerIndex, completion.selectedCardId),
+        selectionMode: 'default',
+      }
+    default:
+      return state
+  }
+}
+
 // ---- Round checks ----
 
 export function isRoundOver(state: GameState): boolean {
@@ -274,7 +418,9 @@ export function endRound(state: GameState, rng: () => number): GameState {
     round: next.round + 1,
     selectionMode: 'default',
     pendingOptions: [],
+    pendingLeaderD4Discards: [],
     roundWins,
+    roundScores: [...(state.roundScores ?? []), [p0Score, p1Score]],
   }
 
   // 3. Faction D: retain one random unit on board before drawing
@@ -303,12 +449,14 @@ export function initMatch(p0: PlayerState, p1: PlayerState, rng: () => number): 
     activePlayer: rng() < 0.5 ? 0 : 1,
     selectionMode: 'mulligan',
     pendingOptions: [],
+    pendingLeaderD4Discards: [],
     randomRestoration: false,
     leaderD1Active: false,
     mulligansUsed: [0, 0],
     mulliganedCardIds: [[], []],
     mulligansConfirmed: [false, false],
     roundWins: [0, 0],
+    roundScores: [],
   }
   let state = drawCards(base, 0, 10)
   state = drawCards(state, 1, 10)
