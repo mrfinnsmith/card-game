@@ -69,6 +69,10 @@ export interface PlayerState {
   leaderAbilityUsed: boolean
 }
 
+export interface MatchResult {
+  winner: 0 | 1 | null
+}
+
 export interface GameState {
   players: [PlayerState, PlayerState]
   weatherZone: WeatherCard[]
@@ -78,4 +82,8 @@ export interface GameState {
   pendingOptions: UnitCard[]
   randomRestoration: boolean
   leaderD1Active: boolean
+  mulligansUsed: [number, number]
+  mulliganedCardIds: [string[], string[]]
+  mulligansConfirmed: [boolean, boolean]
+  roundWins: [number, number]
 }

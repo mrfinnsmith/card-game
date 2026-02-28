@@ -51,6 +51,10 @@ function gameState(p0: PlayerState, p1: PlayerState): GameState {
     pendingOptions: [],
     randomRestoration: false,
     leaderD1Active: false,
+    mulligansUsed: [0, 0],
+    mulliganedCardIds: [[], []],
+    mulligansConfirmed: [false, false],
+    roundWins: [0, 0],
   }
 }
 

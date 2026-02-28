@@ -1,5 +1,13 @@
 import { ABILITIES, FACTIONS } from '@/lib/terminology'
-import type { Card, GameState, PlayerRow, PlayerState, RowType, UnitCard } from '@/types/game'
+import type {
+  Card,
+  GameState,
+  MatchResult,
+  PlayerRow,
+  PlayerState,
+  RowType,
+  UnitCard,
+} from '@/types/game'
 import { computeStrength } from './computeStrength'
 import { applyFactionADraw, applyFactionDRetain, resolveRoundGems } from './factions'
 import { completeAgileSelection, resolveAgile } from './resolvers/agile'
@@ -254,7 +262,9 @@ export function endRound(state: GameState, rng: () => number): GameState {
   // 1. Deduct gems based on round result
   let next = resolveRoundGems(state, p0Score, p1Score)
 
-  // 2. Clear all board cards to discard; reset warCry flags and passed
+  // 2. Clear all board cards to discard; reset warCry flags and passed; update round wins
+  const roundWins: [number, number] = [next.roundWins[0], next.roundWins[1]]
+  if (roundWinner !== null) roundWins[roundWinner]++
   const cleared0 = clearPlayerBoard(next.players[0])
   const cleared1 = clearPlayerBoard(next.players[1])
   next = {
@@ -264,6 +274,7 @@ export function endRound(state: GameState, rng: () => number): GameState {
     round: next.round + 1,
     selectionMode: 'default',
     pendingOptions: [],
+    roundWins,
   }
 
   // 3. Faction D: retain one random unit on board before drawing
@@ -280,4 +291,82 @@ export function endRound(state: GameState, rng: () => number): GameState {
   }
 
   return next
+}
+
+// ---- Match flow ----
+
+export function initMatch(p0: PlayerState, p1: PlayerState, rng: () => number): GameState {
+  const base: GameState = {
+    players: [p0, p1],
+    weatherZone: [],
+    round: 1,
+    activePlayer: rng() < 0.5 ? 0 : 1,
+    selectionMode: 'mulligan',
+    pendingOptions: [],
+    randomRestoration: false,
+    leaderD1Active: false,
+    mulligansUsed: [0, 0],
+    mulliganedCardIds: [[], []],
+    mulligansConfirmed: [false, false],
+    roundWins: [0, 0],
+  }
+  let state = drawCards(base, 0, 10)
+  state = drawCards(state, 1, 10)
+  return state
+}
+
+export function performMulligan(state: GameState, cardId: string, playerIndex: 0 | 1): GameState {
+  if (state.selectionMode !== 'mulligan') return state
+  if (state.mulligansConfirmed[playerIndex]) return state
+  if (state.mulligansUsed[playerIndex] >= 2) return state
+  if (state.mulliganedCardIds[playerIndex].includes(cardId)) return state
+
+  const player = state.players[playerIndex]
+  const card = player.hand.find((c) => c.id === cardId)
+  if (!card) return state
+
+  const hand = player.hand.filter((c) => c.id !== cardId)
+  const deckWithCard = [...player.deck, card]
+  const [drawn, ...deckAfterDraw] = deckWithCard
+  const updated: PlayerState = { ...player, hand: [...hand, drawn], deck: deckAfterDraw }
+  const players: [PlayerState, PlayerState] =
+    playerIndex === 0 ? [updated, state.players[1]] : [state.players[0], updated]
+
+  const mulligansUsed: [number, number] = [state.mulligansUsed[0], state.mulligansUsed[1]]
+  mulligansUsed[playerIndex]++
+  const mulliganedCardIds: [string[], string[]] = [
+    [...state.mulliganedCardIds[0]],
+    [...state.mulliganedCardIds[1]],
+  ]
+  mulliganedCardIds[playerIndex] = [...mulliganedCardIds[playerIndex], cardId]
+
+  return { ...state, players, mulligansUsed, mulliganedCardIds }
+}
+
+export function confirmMulligan(state: GameState, playerIndex: 0 | 1): GameState {
+  if (state.selectionMode !== 'mulligan') return state
+
+  const mulligansConfirmed: [boolean, boolean] = [
+    state.mulligansConfirmed[0],
+    state.mulligansConfirmed[1],
+  ]
+  mulligansConfirmed[playerIndex] = true
+  const bothDone = mulligansConfirmed[0] && mulligansConfirmed[1]
+
+  return {
+    ...state,
+    mulligansConfirmed,
+    selectionMode: bothDone ? 'default' : 'mulligan',
+  }
+}
+
+export function isMatchOver(state: GameState): boolean {
+  return state.players[0].gems === 0 || state.players[1].gems === 0
+}
+
+export function getMatchResult(state: GameState): MatchResult | null {
+  const [p0, p1] = state.players
+  if (p0.gems > 0 && p1.gems > 0) return null
+  if (p0.gems === 0 && p1.gems === 0) return { winner: null }
+  return { winner: p0.gems === 0 ? 1 : 0 }
 }
