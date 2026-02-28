@@ -29,8 +29,12 @@ export function computeStrength(cardId: string, rowState: RowState, boardState: 
   ).length
   strength += moraleBoostCount
 
-  // 4. War Cry: ×2 if active on this row
-  if (rowState.warCry) strength *= 2
+  // 4. War Cry / Leader D1: ×2 at this step; only one doubling applies
+  if (rowState.warCry) {
+    strength *= 2
+  } else if (boardState.leaderD1Active && card.ability === ABILITIES.INFILTRATOR) {
+    strength *= 2
+  }
 
   return strength
 }

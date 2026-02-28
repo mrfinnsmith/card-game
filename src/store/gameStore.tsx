@@ -32,6 +32,7 @@ const initialState: GameState = {
   selectionMode: 'default',
   pendingOptions: [],
   randomRestoration: false,
+  leaderD1Active: false,
 }
 
 function createGameStore() {

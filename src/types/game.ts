@@ -77,4 +77,5 @@ export interface GameState {
   selectionMode: SelectionMode
   pendingOptions: UnitCard[]
   randomRestoration: boolean
+  leaderD1Active: boolean
 }

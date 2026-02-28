@@ -49,6 +49,7 @@ function gameState(p0: PlayerState, p1: PlayerState, opts: Partial<GameState> = 
     selectionMode: 'default',
     pendingOptions: [],
     randomRestoration: false,
+    leaderD1Active: false,
     ...opts,
   }
 }

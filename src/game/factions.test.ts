@@ -51,6 +51,7 @@ function gameState(p0: PlayerState, p1: PlayerState): GameState {
     selectionMode: 'default',
     pendingOptions: [],
     randomRestoration: false,
+    leaderD1Active: false,
   }
 }
 
