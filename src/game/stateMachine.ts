@@ -243,8 +243,8 @@ export function useLeaderAbility(
     case LEADERS.A5:
       return leaderA5(state, playerIndex)
     case LEADERS.B1: {
-      const { state: next } = leaderB1(state, playerIndex, rng)
-      return next
+      const { state: next, revealed } = leaderB1(state, playerIndex, rng)
+      return { ...next, revealedCards: revealed }
     }
     case LEADERS.B2:
       return leaderB2(state, playerIndex)
@@ -340,6 +340,10 @@ export function completeLeaderAbilitySelection(
   }
 }
 
+export function dismissReveal(state: GameState): GameState {
+  return { ...state, revealedCards: undefined }
+}
+
 // ---- Round checks ----
 
 export function isRoundOver(state: GameState): boolean {
@@ -421,6 +425,7 @@ export function endRound(state: GameState, rng: () => number): GameState {
     pendingLeaderD4Discards: [],
     roundWins,
     roundScores: [...(state.roundScores ?? []), [p0Score, p1Score]],
+    revealedCards: undefined,
   }
 
   // 3. Faction D: retain one random unit on board before drawing

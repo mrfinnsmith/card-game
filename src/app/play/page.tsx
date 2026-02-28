@@ -12,6 +12,7 @@ import {
   completeLeaderAbilitySelection,
   completeSelection,
   confirmMulligan,
+  dismissReveal,
   endRound,
   getMatchResult,
   initMatch,
@@ -370,6 +371,10 @@ function GameScreen({
     storeApi.setState(applyLeaderAbility(stateRef.current, 0, Math.random))
   }
 
+  function handleDismissReveal() {
+    storeApi.setState(dismissReveal(stateRef.current))
+  }
+
   function handleLeaderB4Select(cardId: string) {
     storeApi.setState(
       completeLeaderAbilitySelection(
@@ -495,6 +500,7 @@ function GameScreen({
         onLeaderD4DiscardSelect={handleLeaderD4DiscardSelect}
         onLeaderD4DrawSelect={handleLeaderD4DrawSelect}
         onLeaderD5Select={handleLeaderD5Select}
+        onDismissReveal={handleDismissReveal}
       />
 
       {bannerRound !== null && (

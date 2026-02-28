@@ -101,4 +101,5 @@ export interface GameState {
   mulligansConfirmed: [boolean, boolean]
   roundWins: [number, number]
   roundScores?: [number, number][]
+  revealedCards?: Card[]
 }

@@ -18,6 +18,7 @@ export interface SelectionOverlayProps {
   onLeaderD4DiscardSelect: (cardId: string) => void
   onLeaderD4DrawSelect: (cardId: string) => void
   onLeaderD5Select: (cardId: string) => void
+  onDismissReveal: () => void
 }
 
 // ---- Shared subcomponents ----
@@ -243,6 +244,29 @@ function MulliganPanel({
   )
 }
 
+function RevealPanel({ cards, onDismiss }: { cards: Card[]; onDismiss: () => void }) {
+  const footer = (
+    <div className="flex justify-end">
+      <button
+        onClick={onDismiss}
+        className="px-5 py-2 rounded-lg bg-gray-800 text-white font-semibold text-sm hover:bg-gray-700 transition-colors"
+      >
+        Got it
+      </button>
+    </div>
+  )
+
+  return (
+    <Panel title="Leader ability: 3 cards from opponent's hand" footer={footer}>
+      <div className="flex flex-wrap gap-2">
+        {cards.map((card) => (
+          <SelectableCard key={card.id} card={card} />
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
 // ---- Leader ability panels ----
 
 function LeaderCardListPanel({
@@ -311,8 +335,10 @@ export function SelectionOverlay({
   onLeaderD4DiscardSelect,
   onLeaderD4DrawSelect,
   onLeaderD5Select,
+  onDismissReveal,
 }: SelectionOverlayProps) {
   const mode = useGameStore((s) => s.selectionMode)
+  const revealedCards = useGameStore((s) => s.revealedCards)
   const pendingOptions = useGameStore((s) => s.pendingOptions)
   const hand = useGameStore((s) => s.players[0].hand)
   const mulligansUsed = useGameStore((s) => s.mulligansUsed[0])
@@ -323,6 +349,10 @@ export function SelectionOverlay({
   const ownDeck = useGameStore((s) => s.players[0].deck)
   const opponentDiscard = useGameStore((s) => s.players[1].discard)
   const pendingLeaderD4Discards = useGameStore((s) => s.pendingLeaderD4Discards ?? [])
+
+  if (revealedCards && revealedCards.length > 0) {
+    return <RevealPanel cards={revealedCards} onDismiss={onDismissReveal} />
+  }
 
   if (mode === 'default') return null
 
