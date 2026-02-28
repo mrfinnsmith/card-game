@@ -78,9 +78,13 @@ function BoardRow({ row, state }: { row: RowState; state: GameState }) {
   )
 }
 
-function WeatherZone({ weatherZone }: { weatherZone: WeatherCard[] }) {
+function WeatherZone({ weatherZone, round }: { weatherZone: WeatherCard[]; round: number }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2 bg-sky-50 border-y border-sky-200 min-h-[44px]">
+      <span className="text-xs font-semibold text-gray-500 shrink-0 tabular-nums">
+        Round {round}
+      </span>
+      <div className="w-px bg-sky-200 shrink-0 self-stretch" />
       <span className="text-[10px] font-semibold text-sky-500 uppercase tracking-wider shrink-0">
         Weather
       </span>
@@ -167,7 +171,7 @@ export function Board() {
       <BoardRow row={opponent.board.ranged} state={state} />
       <BoardRow row={opponent.board.melee} state={state} />
 
-      <WeatherZone weatherZone={state.weatherZone} />
+      <WeatherZone weatherZone={state.weatherZone} round={state.round} />
 
       {/* Player rows: Melee, Ranged, Siege (top to bottom) */}
       <BoardRow row={player.board.melee} state={state} />
