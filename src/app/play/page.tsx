@@ -230,6 +230,8 @@ function GameScreen({
 
   const workerRef = useRef<Worker | null>(null)
   const aiThinkingRef = useRef(false)
+  const prevRoundRef = useRef(state.round)
+  const [bannerRound, setBannerRound] = useState<number | null>(null)
 
   // Initialize the AI web worker once.
   useEffect(() => {
@@ -289,6 +291,20 @@ function GameScreen({
       workerRef.current.postMessage({ state, playerIndex: 1, difficulty: DIFFICULTY })
     }
   }, [state, storeApi])
+
+  // Show round banner when a new round starts (not round 1).
+  useEffect(() => {
+    if (state.round > prevRoundRef.current) {
+      if (state.round > 1) setBannerRound(state.round)
+      prevRoundRef.current = state.round
+    }
+  }, [state.round])
+
+  useEffect(() => {
+    if (bannerRound === null) return
+    const timer = setTimeout(() => setBannerRound(null), 2000)
+    return () => clearTimeout(timer)
+  }, [bannerRound])
 
   // Apply a state change, then check for round/match end.
   function applyAndAdvance(next: GameState) {
@@ -480,6 +496,15 @@ function GameScreen({
         onLeaderD4DrawSelect={handleLeaderD4DrawSelect}
         onLeaderD5Select={handleLeaderD5Select}
       />
+
+      {bannerRound !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-50/80 backdrop-blur-sm">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-lg px-10 py-6 text-center">
+            <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Starting</p>
+            <p className="text-3xl font-bold text-gray-900">Round {bannerRound}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
