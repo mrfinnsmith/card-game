@@ -24,7 +24,7 @@ function createPlayerState(faction = FACTIONS.A): PlayerState {
   }
 }
 
-const initialState: GameState = {
+const defaultInitialState: GameState = {
   players: [createPlayerState(), createPlayerState()],
   weatherZone: [],
   round: 1,
@@ -39,16 +39,22 @@ const initialState: GameState = {
   roundWins: [0, 0],
 }
 
-function createGameStore() {
-  return createStore<GameState>()(() => ({ ...initialState }))
+function createGameStore(state?: GameState) {
+  return createStore<GameState>()(() => (state ? { ...state } : { ...defaultInitialState }))
 }
 
 const GameStoreContext = createContext<GameStore | null>(null)
 
-export function GameStoreProvider({ children }: { children: React.ReactNode }) {
+export function GameStoreProvider({
+  children,
+  initialState,
+}: {
+  children: React.ReactNode
+  initialState?: GameState
+}) {
   const storeRef = useRef<GameStore>(undefined)
   if (!storeRef.current) {
-    storeRef.current = createGameStore()
+    storeRef.current = createGameStore(initialState)
   }
   return <GameStoreContext.Provider value={storeRef.current}>{children}</GameStoreContext.Provider>
 }
@@ -57,4 +63,10 @@ export function useGameStore<T>(selector: (state: GameState) => T): T {
   const store = useContext(GameStoreContext)
   if (!store) throw new Error('useGameStore must be used within a GameStoreProvider')
   return useStore(store, selector)
+}
+
+export function useGameStoreApi(): GameStore {
+  const store = useContext(GameStoreContext)
+  if (!store) throw new Error('useGameStoreApi must be used within a GameStoreProvider')
+  return store
 }
