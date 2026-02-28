@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "cli": "tsx src/game/cli.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -47,6 +48,7 @@
     "postcss": "^8",
     "prettier": "^3.8.1",
     "tailwindcss": "^3",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }
