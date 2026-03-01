@@ -31,14 +31,80 @@ function MultiplayerGameScreen({
   const [submitting, setSubmitting] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [bannerRound, setBannerRound] = useState<number | null>(null)
+  const [disconnectionCountdown, setDisconnectionCountdown] = useState<number | null>(null)
   const prevRoundRef = useRef(state.round)
   const onMatchEndRef = useRef(onMatchEnd)
   onMatchEndRef.current = onMatchEnd
+  const forfeitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const cancelDisconnectionTimer = useCallback(() => {
+    if (forfeitTimerRef.current !== null) {
+      clearTimeout(forfeitTimerRef.current)
+      forfeitTimerRef.current = null
+    }
+    if (countdownIntervalRef.current !== null) {
+      clearInterval(countdownIntervalRef.current)
+      countdownIntervalRef.current = null
+    }
+    setDisconnectionCountdown(null)
+  }, [])
+
+  const callForfeit = useCallback(async () => {
+    await fetch(`/api/game/${gameId}/forfeit`, { method: 'POST' }).catch(console.error)
+  }, [gameId])
+
+  const startDisconnectionTimer = useCallback(() => {
+    if (forfeitTimerRef.current !== null) return
+    setDisconnectionCountdown(60)
+    countdownIntervalRef.current = setInterval(() => {
+      setDisconnectionCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : null))
+    }, 1000)
+    forfeitTimerRef.current = setTimeout(() => {
+      if (countdownIntervalRef.current !== null) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+      }
+      forfeitTimerRef.current = null
+      void callForfeit()
+    }, 60_000)
+  }, [callForfeit])
 
   // Subscribe to the game's Realtime broadcast channel.
+  // Disconnection is detected via application-level pings every 3 seconds.
+  // Supabase Presence relies on the WebSocket heartbeat (~30s server timeout),
+  // which is too slow — pings give ~5-11 second detection.
   useEffect(() => {
-    const channel = supabase
-      .channel(`game:${gameId}`)
+    const opponentIdx = (1 - playerIndex) as 0 | 1
+    let pingInterval: ReturnType<typeof setInterval> | null = null
+    let checkInterval: ReturnType<typeof setInterval> | null = null
+    let lastOpponentPing: number | null = null
+
+    const channel = supabase.channel(`game:${gameId}`)
+
+    // Use the same REST broadcast path the server uses for state updates.
+    // channel.send() goes client→WebSocket→server→clients and may be blocked
+    // by Supabase Realtime policies. REST broadcast is always authorised.
+    function broadcastPing() {
+      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
+        method: 'POST',
+        headers: {
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              topic: `game:${gameId}`,
+              event: 'ping',
+              payload: { pi: playerIndex },
+              private: false,
+            },
+          ],
+        }),
+      }).catch(() => {})
+    }
+
+    channel
       .on('broadcast', { event: 'state_update' }, (msg) => {
         const payload = msg.payload as { for_player: number; state: MaskedGameState }
         if (payload.for_player !== playerIndex) return
@@ -51,15 +117,39 @@ function MultiplayerGameScreen({
           if (result) onMatchEndRef.current(result, hydrated.roundWins)
         }
       })
-      .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR') console.error('Realtime channel error:', err)
-        else if (status === 'TIMED_OUT') console.error('Realtime channel timed out')
+      .on('broadcast', { event: 'forfeit' }, (msg) => {
+        const { winner_player_index } = msg.payload as { winner_player_index: 0 | 1 }
+        cancelDisconnectionTimer()
+        const result: MatchResult = { winner: winner_player_index === playerIndex ? 0 : 1 }
+        onMatchEndRef.current(result, storeApi.getState().roundWins)
+      })
+      .on('broadcast', { event: 'ping' }, (msg) => {
+        const { pi } = msg.payload as { pi: number }
+        if (pi !== opponentIdx) return
+        lastOpponentPing = Date.now()
+        cancelDisconnectionTimer()
+      })
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return
+
+        // Send a ping immediately so the opponent knows we are here, then every 3s.
+        broadcastPing()
+        pingInterval = setInterval(broadcastPing, 3_000)
+
+        // If the opponent's last ping is > 8 seconds old, they are disconnected.
+        checkInterval = setInterval(() => {
+          if (lastOpponentPing === null) return
+          if (Date.now() - lastOpponentPing > 8_000) startDisconnectionTimer()
+        }, 3_000)
       })
 
     return () => {
+      cancelDisconnectionTimer()
+      if (pingInterval !== null) clearInterval(pingInterval)
+      if (checkInterval !== null) clearInterval(checkInterval)
       supabase.removeChannel(channel)
     }
-  }, [gameId, playerIndex, supabase, storeApi])
+  }, [gameId, playerIndex, supabase, storeApi, cancelDisconnectionTimer, startDisconnectionTimer])
 
   // Show round banner when a new round starts (not round 1).
   useEffect(() => {
@@ -125,6 +215,14 @@ function MultiplayerGameScreen({
       {moveError && (
         <div className="text-center">
           <span className="text-xs text-red-600 bg-red-50 px-3 py-1 rounded-full">{moveError}</span>
+        </div>
+      )}
+
+      {disconnectionCountdown !== null && (
+        <div className="text-center">
+          <span className="text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
+            Opponent disconnected. Forfeiting in {disconnectionCountdown}s.
+          </span>
         </div>
       )}
 
@@ -286,9 +384,9 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
 
       const { data: game, error: gameErr } = await supabase
         .from('cards_games')
-        .select('id, status, state')
+        .select('id, status, state, result')
         .eq('lobby_id', lobbyId)
-        .in('status', ['active', 'completed'])
+        .in('status', ['active', 'completed', 'forfeited', 'abandoned'])
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
@@ -305,6 +403,26 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
       setGameId(game.id as string)
       setPlayerIndex(index)
       setInitialState(hydrated)
+
+      if (game.status === 'forfeited') {
+        const dbResult = game.result as { winner_id?: string } | null
+        const winner: 0 | 1 | null = dbResult?.winner_id
+          ? dbResult.winner_id === user.id
+            ? 0
+            : 1
+          : null
+        setMatchResult({ winner })
+        setRoundWins(hydrated.roundWins)
+        setPhase('match-result')
+        return
+      }
+
+      if (game.status === 'abandoned') {
+        setMatchResult({ winner: null })
+        setRoundWins(hydrated.roundWins)
+        setPhase('match-result')
+        return
+      }
 
       if (game.status === 'completed' || isMatchOver(hydrated)) {
         const result = getMatchResult(hydrated)
