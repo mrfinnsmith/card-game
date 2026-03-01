@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict uQRx6bkX1MKTgSRFhL8LTF9cNgeYZbh2SXjamcdxL2mg1gfPFdTjzEK6j7KM4Vy
+\restrict DrY9atuLqtbBBx6Pyx3FWQR9Qh7u7VHKRAsvI4BdQTEJJKr5ckTfsfidLuFww6X
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1
@@ -135,6 +135,20 @@ CREATE FUNCTION public.cards_handle_new_user() RETURNS trigger
 begin
   insert into public.cards_profiles (user_id, username)
   values (new.id, new.raw_user_meta_data ->> 'username');
+  return new;
+end;
+$$;
+
+
+--
+-- Name: cards_update_games_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cards_update_games_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.updated_at = now();
   return new;
 end;
 $$;
@@ -1427,6 +1441,39 @@ ALTER SEQUENCE public.anonymous_guesses_id_seq OWNED BY public.guesses.id;
 
 
 --
+-- Name: cards_games; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cards_games (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    lobby_id uuid NOT NULL,
+    state jsonb NOT NULL,
+    current_player_id uuid,
+    status text DEFAULT 'active'::text NOT NULL,
+    result jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cards_games_status_values CHECK ((status = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text, 'forfeited'::text])))
+);
+
+
+--
+-- Name: cards_lobbies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cards_lobbies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    join_code text NOT NULL,
+    host_id uuid NOT NULL,
+    guest_id uuid,
+    status text DEFAULT 'waiting'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cards_lobbies_join_code_length CHECK ((char_length(join_code) = 6)),
+    CONSTRAINT cards_lobbies_status_values CHECK ((status = ANY (ARRAY['waiting'::text, 'ready'::text, 'selecting'::text, 'in_progress'::text, 'completed'::text, 'expired'::text])))
+);
+
+
+--
 -- Name: cards_profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2050,6 +2097,30 @@ ALTER TABLE ONLY public.game_sessions
 
 
 --
+-- Name: cards_games cards_games_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_games
+    ADD CONSTRAINT cards_games_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cards_lobbies cards_lobbies_join_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_lobbies
+    ADD CONSTRAINT cards_lobbies_join_code_key UNIQUE (join_code);
+
+
+--
+-- Name: cards_lobbies cards_lobbies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_lobbies
+    ADD CONSTRAINT cards_lobbies_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cards_profiles cards_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2306,6 +2377,27 @@ ALTER TABLE ONLY public.violets_sessions
 
 
 --
+-- Name: cards_games_lobby_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cards_games_lobby_id_idx ON public.cards_games USING btree (lobby_id);
+
+
+--
+-- Name: cards_lobbies_host_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cards_lobbies_host_id_idx ON public.cards_lobbies USING btree (host_id);
+
+
+--
+-- Name: cards_lobbies_join_code_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cards_lobbies_join_code_idx ON public.cards_lobbies USING btree (join_code);
+
+
+--
 -- Name: idx_daily_puzzles_last_presented; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2355,6 +2447,13 @@ CREATE TRIGGER auto_queue_position BEFORE INSERT ON public.frisc_puzzle_queue FO
 
 
 --
+-- Name: cards_games cards_games_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cards_games_updated_at BEFORE UPDATE ON public.cards_games FOR EACH ROW EXECUTE FUNCTION public.cards_update_games_updated_at();
+
+
+--
 -- Name: frisc_categories validate_category_data; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2382,6 +2481,38 @@ ALTER TABLE ONLY public.guesses
 
 ALTER TABLE ONLY public.guesses
     ADD CONSTRAINT anonymous_guesses_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.game_sessions(session_id);
+
+
+--
+-- Name: cards_games cards_games_current_player_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_games
+    ADD CONSTRAINT cards_games_current_player_id_fkey FOREIGN KEY (current_player_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cards_games cards_games_lobby_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_games
+    ADD CONSTRAINT cards_games_lobby_id_fkey FOREIGN KEY (lobby_id) REFERENCES public.cards_lobbies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cards_lobbies cards_lobbies_guest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_lobbies
+    ADD CONSTRAINT cards_lobbies_guest_id_fkey FOREIGN KEY (guest_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cards_lobbies cards_lobbies_host_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cards_lobbies
+    ADD CONSTRAINT cards_lobbies_host_id_fkey FOREIGN KEY (host_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -2667,6 +2798,58 @@ CREATE POLICY "Anyone can read profiles" ON public.cards_profiles FOR SELECT USI
 
 
 --
+-- Name: cards_games Host can insert game; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Host can insert game" ON public.cards_games FOR INSERT WITH CHECK ((auth.uid() IN ( SELECT cards_lobbies.host_id
+   FROM public.cards_lobbies
+  WHERE (cards_lobbies.id = cards_games.lobby_id))));
+
+
+--
+-- Name: cards_lobbies Players can create lobbies as host; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Players can create lobbies as host" ON public.cards_lobbies FOR INSERT WITH CHECK ((auth.uid() = host_id));
+
+
+--
+-- Name: cards_games Players can read their own games; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Players can read their own games" ON public.cards_games FOR SELECT USING (((auth.uid() IN ( SELECT cards_lobbies.host_id
+   FROM public.cards_lobbies
+  WHERE (cards_lobbies.id = cards_games.lobby_id))) OR (auth.uid() IN ( SELECT cards_lobbies.guest_id
+   FROM public.cards_lobbies
+  WHERE (cards_lobbies.id = cards_games.lobby_id)))));
+
+
+--
+-- Name: cards_lobbies Players can read their own lobbies; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Players can read their own lobbies" ON public.cards_lobbies FOR SELECT USING (((auth.uid() = host_id) OR (auth.uid() = guest_id)));
+
+
+--
+-- Name: cards_games Players can update their own games; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Players can update their own games" ON public.cards_games FOR UPDATE USING (((auth.uid() IN ( SELECT cards_lobbies.host_id
+   FROM public.cards_lobbies
+  WHERE (cards_lobbies.id = cards_games.lobby_id))) OR (auth.uid() IN ( SELECT cards_lobbies.guest_id
+   FROM public.cards_lobbies
+  WHERE (cards_lobbies.id = cards_games.lobby_id)))));
+
+
+--
+-- Name: cards_lobbies Players can update their own lobbies; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Players can update their own lobbies" ON public.cards_lobbies FOR UPDATE USING (((auth.uid() = host_id) OR (auth.uid() = guest_id)));
+
+
+--
 -- Name: fjordle_game_sessions Public insert access; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2777,6 +2960,18 @@ CREATE POLICY "Users can insert own profile" ON public.cards_profiles FOR INSERT
 
 CREATE POLICY "Users can update own profile" ON public.cards_profiles FOR UPDATE USING ((auth.uid() = user_id));
 
+
+--
+-- Name: cards_games; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cards_games ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cards_lobbies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cards_lobbies ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: cards_profiles; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2935,690 +3130,8 @@ ALTER TABLE public.violets_player_choices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.violets_sessions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: -
---
-
-GRANT USAGE ON SCHEMA public TO postgres;
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT USAGE ON SCHEMA public TO authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
-
-
---
--- Name: FUNCTION assign_daily_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.assign_daily_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.assign_daily_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.assign_daily_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION cards_handle_new_user(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.cards_handle_new_user() TO anon;
-GRANT ALL ON FUNCTION public.cards_handle_new_user() TO authenticated;
-GRANT ALL ON FUNCTION public.cards_handle_new_user() TO service_role;
-
-
---
--- Name: FUNCTION check_missing_puzzles(days_back integer); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.check_missing_puzzles(days_back integer) TO anon;
-GRANT ALL ON FUNCTION public.check_missing_puzzles(days_back integer) TO authenticated;
-GRANT ALL ON FUNCTION public.check_missing_puzzles(days_back integer) TO service_role;
-
-
---
--- Name: FUNCTION check_puzzle_integrity(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.check_puzzle_integrity() TO anon;
-GRANT ALL ON FUNCTION public.check_puzzle_integrity() TO authenticated;
-GRANT ALL ON FUNCTION public.check_puzzle_integrity() TO service_role;
-
-
---
--- Name: FUNCTION daily_health_check(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.daily_health_check() TO anon;
-GRANT ALL ON FUNCTION public.daily_health_check() TO authenticated;
-GRANT ALL ON FUNCTION public.daily_health_check() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_assign_daily_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_assign_daily_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_assign_daily_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_assign_daily_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_check_missing_puzzles(days_back integer); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_check_missing_puzzles(days_back integer) TO anon;
-GRANT ALL ON FUNCTION public.fjordle_check_missing_puzzles(days_back integer) TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_check_missing_puzzles(days_back integer) TO service_role;
-
-
---
--- Name: FUNCTION fjordle_check_puzzle_integrity(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_check_puzzle_integrity() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_check_puzzle_integrity() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_check_puzzle_integrity() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_daily_health_check(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_daily_health_check() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_daily_health_check() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_daily_health_check() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_get_daily_fjord_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_get_daily_fjord_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_get_daily_fjord_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_get_daily_fjord_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_get_fjord_by_slug(p_slug text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_by_slug(p_slug text) TO anon;
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_by_slug(p_slug text) TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_by_slug(p_slug text) TO service_role;
-
-
---
--- Name: FUNCTION fjordle_get_fjord_puzzle_by_number(puzzle_num integer); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_puzzle_by_number(puzzle_num integer) TO anon;
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_puzzle_by_number(puzzle_num integer) TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_get_fjord_puzzle_by_number(puzzle_num integer) TO service_role;
-
-
---
--- Name: FUNCTION fjordle_get_past_puzzles(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_get_past_puzzles() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_get_past_puzzles() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_get_past_puzzles() TO service_role;
-
-
---
--- Name: FUNCTION fjordle_update_puzzle_difficulty_tiers(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.fjordle_update_puzzle_difficulty_tiers() TO anon;
-GRANT ALL ON FUNCTION public.fjordle_update_puzzle_difficulty_tiers() TO authenticated;
-GRANT ALL ON FUNCTION public.fjordle_update_puzzle_difficulty_tiers() TO service_role;
-
-
---
--- Name: FUNCTION frisc_assign_daily_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_assign_daily_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.frisc_assign_daily_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_assign_daily_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION frisc_auto_assign_queue_position(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_auto_assign_queue_position() TO anon;
-GRANT ALL ON FUNCTION public.frisc_auto_assign_queue_position() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_auto_assign_queue_position() TO service_role;
-
-
---
--- Name: FUNCTION frisc_get_daily_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_get_daily_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.frisc_get_daily_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_get_daily_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION frisc_get_next_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_get_next_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.frisc_get_next_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_get_next_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION frisc_get_past_puzzles(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_get_past_puzzles() TO anon;
-GRANT ALL ON FUNCTION public.frisc_get_past_puzzles() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_get_past_puzzles() TO service_role;
-
-
---
--- Name: FUNCTION frisc_get_puzzle_by_number(puzzle_num integer); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_get_puzzle_by_number(puzzle_num integer) TO anon;
-GRANT ALL ON FUNCTION public.frisc_get_puzzle_by_number(puzzle_num integer) TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_get_puzzle_by_number(puzzle_num integer) TO service_role;
-
-
---
--- Name: FUNCTION frisc_normalize_and_validate_category(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_normalize_and_validate_category() TO anon;
-GRANT ALL ON FUNCTION public.frisc_normalize_and_validate_category() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_normalize_and_validate_category() TO service_role;
-
-
---
--- Name: FUNCTION frisc_update_puzzle_difficulty_tiers(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_update_puzzle_difficulty_tiers() TO anon;
-GRANT ALL ON FUNCTION public.frisc_update_puzzle_difficulty_tiers() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_update_puzzle_difficulty_tiers() TO service_role;
-
-
---
--- Name: FUNCTION frisc_validate_puzzle_composition(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.frisc_validate_puzzle_composition() TO anon;
-GRANT ALL ON FUNCTION public.frisc_validate_puzzle_composition() TO authenticated;
-GRANT ALL ON FUNCTION public.frisc_validate_puzzle_composition() TO service_role;
-
-
---
--- Name: FUNCTION get_daily_fjord_puzzle(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.get_daily_fjord_puzzle() TO anon;
-GRANT ALL ON FUNCTION public.get_daily_fjord_puzzle() TO authenticated;
-GRANT ALL ON FUNCTION public.get_daily_fjord_puzzle() TO service_role;
-
-
---
--- Name: FUNCTION get_fjord_puzzle_by_number(puzzle_num integer); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.get_fjord_puzzle_by_number(puzzle_num integer) TO anon;
-GRANT ALL ON FUNCTION public.get_fjord_puzzle_by_number(puzzle_num integer) TO authenticated;
-GRANT ALL ON FUNCTION public.get_fjord_puzzle_by_number(puzzle_num integer) TO service_role;
-
-
---
--- Name: FUNCTION get_past_puzzles(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.get_past_puzzles() TO anon;
-GRANT ALL ON FUNCTION public.get_past_puzzles() TO authenticated;
-GRANT ALL ON FUNCTION public.get_past_puzzles() TO service_role;
-
-
---
--- Name: FUNCTION update_difficulty_tiers(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.update_difficulty_tiers() TO anon;
-GRANT ALL ON FUNCTION public.update_difficulty_tiers() TO authenticated;
-GRANT ALL ON FUNCTION public.update_difficulty_tiers() TO service_role;
-
-
---
--- Name: TABLE guesses; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.guesses TO anon;
-GRANT ALL ON TABLE public.guesses TO authenticated;
-GRANT ALL ON TABLE public.guesses TO service_role;
-
-
---
--- Name: SEQUENCE anonymous_guesses_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.anonymous_guesses_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.anonymous_guesses_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.anonymous_guesses_id_seq TO service_role;
-
-
---
--- Name: TABLE cards_profiles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.cards_profiles TO anon;
-GRANT ALL ON TABLE public.cards_profiles TO authenticated;
-GRANT ALL ON TABLE public.cards_profiles TO service_role;
-
-
---
--- Name: TABLE daily_puzzles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.daily_puzzles TO anon;
-GRANT ALL ON TABLE public.daily_puzzles TO authenticated;
-GRANT ALL ON TABLE public.daily_puzzles TO service_role;
-
-
---
--- Name: TABLE fjordle_counties; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_counties TO anon;
-GRANT ALL ON TABLE public.fjordle_counties TO authenticated;
-GRANT ALL ON TABLE public.fjordle_counties TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_counties_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_counties_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_counties_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_counties_id_seq TO service_role;
-
-
---
--- Name: TABLE fjordle_daily_puzzles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_daily_puzzles TO anon;
-GRANT ALL ON TABLE public.fjordle_daily_puzzles TO authenticated;
-GRANT ALL ON TABLE public.fjordle_daily_puzzles TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_daily_puzzles_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_daily_puzzles_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_daily_puzzles_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_daily_puzzles_id_seq TO service_role;
-
-
---
--- Name: TABLE fjordle_fjord_counties; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_fjord_counties TO anon;
-GRANT ALL ON TABLE public.fjordle_fjord_counties TO authenticated;
-GRANT ALL ON TABLE public.fjordle_fjord_counties TO service_role;
-
-
---
--- Name: TABLE fjordle_fjord_municipalities; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_fjord_municipalities TO anon;
-GRANT ALL ON TABLE public.fjordle_fjord_municipalities TO authenticated;
-GRANT ALL ON TABLE public.fjordle_fjord_municipalities TO service_role;
-
-
---
--- Name: TABLE fjordle_fjords; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_fjords TO anon;
-GRANT ALL ON TABLE public.fjordle_fjords TO authenticated;
-GRANT ALL ON TABLE public.fjordle_fjords TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_fjords_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_fjords_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_fjords_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_fjords_id_seq TO service_role;
-
-
---
--- Name: TABLE fjordle_game_sessions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_game_sessions TO anon;
-GRANT ALL ON TABLE public.fjordle_game_sessions TO authenticated;
-GRANT ALL ON TABLE public.fjordle_game_sessions TO service_role;
-
-
---
--- Name: TABLE fjordle_guesses; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_guesses TO anon;
-GRANT ALL ON TABLE public.fjordle_guesses TO authenticated;
-GRANT ALL ON TABLE public.fjordle_guesses TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_guesses_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_guesses_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_guesses_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_guesses_id_seq TO service_role;
-
-
---
--- Name: TABLE fjordle_municipalities; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_municipalities TO anon;
-GRANT ALL ON TABLE public.fjordle_municipalities TO authenticated;
-GRANT ALL ON TABLE public.fjordle_municipalities TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_municipalities_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_municipalities_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_municipalities_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_municipalities_id_seq TO service_role;
-
-
---
--- Name: TABLE fjordle_puzzle_queue; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjordle_puzzle_queue TO anon;
-GRANT ALL ON TABLE public.fjordle_puzzle_queue TO authenticated;
-GRANT ALL ON TABLE public.fjordle_puzzle_queue TO service_role;
-
-
---
--- Name: SEQUENCE fjordle_puzzle_queue_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjordle_puzzle_queue_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjordle_puzzle_queue_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjordle_puzzle_queue_id_seq TO service_role;
-
-
---
--- Name: TABLE fjords; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.fjords TO anon;
-GRANT ALL ON TABLE public.fjords TO authenticated;
-GRANT ALL ON TABLE public.fjords TO service_role;
-
-
---
--- Name: SEQUENCE fjords_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.fjords_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.fjords_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.fjords_id_seq TO service_role;
-
-
---
--- Name: TABLE frisc_anonymous_guesses; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_anonymous_guesses TO anon;
-GRANT ALL ON TABLE public.frisc_anonymous_guesses TO authenticated;
-GRANT ALL ON TABLE public.frisc_anonymous_guesses TO service_role;
-
-
---
--- Name: SEQUENCE frisc_anonymous_guesses_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.frisc_anonymous_guesses_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.frisc_anonymous_guesses_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.frisc_anonymous_guesses_id_seq TO service_role;
-
-
---
--- Name: TABLE frisc_anonymous_sessions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_anonymous_sessions TO anon;
-GRANT ALL ON TABLE public.frisc_anonymous_sessions TO authenticated;
-GRANT ALL ON TABLE public.frisc_anonymous_sessions TO service_role;
-
-
---
--- Name: TABLE frisc_categories; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_categories TO anon;
-GRANT ALL ON TABLE public.frisc_categories TO authenticated;
-GRANT ALL ON TABLE public.frisc_categories TO service_role;
-
-
---
--- Name: SEQUENCE frisc_categories_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.frisc_categories_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.frisc_categories_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.frisc_categories_id_seq TO service_role;
-
-
---
--- Name: TABLE frisc_category_staging; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_category_staging TO anon;
-GRANT ALL ON TABLE public.frisc_category_staging TO authenticated;
-GRANT ALL ON TABLE public.frisc_category_staging TO service_role;
-
-
---
--- Name: TABLE frisc_puzzle_presentations; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_puzzle_presentations TO anon;
-GRANT ALL ON TABLE public.frisc_puzzle_presentations TO authenticated;
-GRANT ALL ON TABLE public.frisc_puzzle_presentations TO service_role;
-
-
---
--- Name: SEQUENCE frisc_puzzle_presentations_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.frisc_puzzle_presentations_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.frisc_puzzle_presentations_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.frisc_puzzle_presentations_id_seq TO service_role;
-
-
---
--- Name: TABLE frisc_puzzle_queue; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_puzzle_queue TO anon;
-GRANT ALL ON TABLE public.frisc_puzzle_queue TO authenticated;
-GRANT ALL ON TABLE public.frisc_puzzle_queue TO service_role;
-
-
---
--- Name: TABLE frisc_puzzles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.frisc_puzzles TO anon;
-GRANT ALL ON TABLE public.frisc_puzzles TO authenticated;
-GRANT ALL ON TABLE public.frisc_puzzles TO service_role;
-
-
---
--- Name: SEQUENCE frisc_puzzles_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.frisc_puzzles_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.frisc_puzzles_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.frisc_puzzles_id_seq TO service_role;
-
-
---
--- Name: TABLE game_sessions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.game_sessions TO anon;
-GRANT ALL ON TABLE public.game_sessions TO authenticated;
-GRANT ALL ON TABLE public.game_sessions TO service_role;
-
-
---
--- Name: SEQUENCE puzzle_presentations_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.puzzle_presentations_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.puzzle_presentations_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.puzzle_presentations_id_seq TO service_role;
-
-
---
--- Name: TABLE puzzle_queue; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.puzzle_queue TO anon;
-GRANT ALL ON TABLE public.puzzle_queue TO authenticated;
-GRANT ALL ON TABLE public.puzzle_queue TO service_role;
-
-
---
--- Name: SEQUENCE puzzle_queue_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.puzzle_queue_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.puzzle_queue_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.puzzle_queue_id_seq TO service_role;
-
-
---
--- Name: TABLE violets_completions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.violets_completions TO anon;
-GRANT ALL ON TABLE public.violets_completions TO authenticated;
-GRANT ALL ON TABLE public.violets_completions TO service_role;
-
-
---
--- Name: TABLE violets_game_sessions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.violets_game_sessions TO anon;
-GRANT ALL ON TABLE public.violets_game_sessions TO authenticated;
-GRANT ALL ON TABLE public.violets_game_sessions TO service_role;
-
-
---
--- Name: TABLE violets_node_versions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.violets_node_versions TO anon;
-GRANT ALL ON TABLE public.violets_node_versions TO authenticated;
-GRANT ALL ON TABLE public.violets_node_versions TO service_role;
-
-
---
--- Name: TABLE violets_player_choices; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.violets_player_choices TO anon;
-GRANT ALL ON TABLE public.violets_player_choices TO authenticated;
-GRANT ALL ON TABLE public.violets_player_choices TO service_role;
-
-
---
--- Name: TABLE violets_sessions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.violets_sessions TO anon;
-GRANT ALL ON TABLE public.violets_sessions TO authenticated;
-GRANT ALL ON TABLE public.violets_sessions TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: -
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO service_role;
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict uQRx6bkX1MKTgSRFhL8LTF9cNgeYZbh2SXjamcdxL2mg1gfPFdTjzEK6j7KM4Vy
+\unrestrict DrY9atuLqtbBBx6Pyx3FWQR9Qh7u7VHKRAsvI4BdQTEJJKr5ckTfsfidLuFww6X
 
