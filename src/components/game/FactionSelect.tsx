@@ -20,7 +20,7 @@ function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]
 }
 
-function FactionStep({
+export function FactionStep({
   selected,
   onSelect,
 }: {
@@ -51,7 +51,7 @@ function FactionStep({
   )
 }
 
-function LeaderStep({
+export function LeaderStep({
   factionData,
   selected,
   onSelect,
