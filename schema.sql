@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 4dVHftJNFWqnnN0Hxb7iCPy39gBW4XEbKH62eWsHu700ACshmZel5rA5YxQhKu7
+\restrict kn7cSJ9Es4krf7mCH9vvH5NEZ9B59UasvX6QdYvoEVw9gE5Z2CzBKx18nHXaN1H
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1
@@ -133,6 +133,11 @@ CREATE FUNCTION public.cards_handle_new_user() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
+  -- Skip profile creation for anonymous signins (no username in metadata).
+  if new.raw_user_meta_data ->> 'username' is null then
+    return new;
+  end if;
+
   insert into public.cards_profiles (user_id, username)
   values (new.id, new.raw_user_meta_data ->> 'username');
   return new;
@@ -2149,6 +2154,7 @@ COPY public.cards_games (id, lobby_id, state, current_player_id, status, result,
 --
 
 COPY public.cards_lobbies (id, join_code, host_id, guest_id, status, created_at, host_ready, guest_ready) FROM stdin;
+e2142ac7-9c74-4675-965a-0d6c7177964f	42JJPR	778f0899-b87a-45a4-ade2-de62d9548b47	\N	waiting	2026-03-01 02:32:11.570426+00	t	f
 \.
 
 
@@ -13632,13 +13638,6 @@ CREATE POLICY "Host can insert game" ON public.cards_games FOR INSERT WITH CHECK
 
 
 --
--- Name: cards_lobbies Players can create lobbies as host; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Players can create lobbies as host" ON public.cards_lobbies FOR INSERT WITH CHECK ((auth.uid() = host_id));
-
-
---
 -- Name: cards_games Players can read their own games; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13773,17 +13772,24 @@ CREATE POLICY "Public update access" ON public.game_sessions FOR UPDATE USING (t
 
 
 --
--- Name: cards_profiles Users can insert own profile; Type: POLICY; Schema: public; Owner: -
+-- Name: cards_lobbies Registered users can create lobbies as host; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can insert own profile" ON public.cards_profiles FOR INSERT WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Registered users can create lobbies as host" ON public.cards_lobbies FOR INSERT WITH CHECK (((auth.uid() = host_id) AND (NOT COALESCE(((auth.jwt() ->> 'is_anonymous'::text))::boolean, false))));
 
 
 --
--- Name: cards_profiles Users can update own profile; Type: POLICY; Schema: public; Owner: -
+-- Name: cards_profiles Registered users can insert own profile; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can update own profile" ON public.cards_profiles FOR UPDATE USING ((auth.uid() = user_id));
+CREATE POLICY "Registered users can insert own profile" ON public.cards_profiles FOR INSERT WITH CHECK (((auth.uid() = user_id) AND (NOT COALESCE(((auth.jwt() ->> 'is_anonymous'::text))::boolean, false))));
+
+
+--
+-- Name: cards_profiles Registered users can update own profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Registered users can update own profile" ON public.cards_profiles FOR UPDATE USING (((auth.uid() = user_id) AND (NOT COALESCE(((auth.jwt() ->> 'is_anonymous'::text))::boolean, false))));
 
 
 --
@@ -13958,5 +13964,5 @@ ALTER TABLE public.violets_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 4dVHftJNFWqnnN0Hxb7iCPy39gBW4XEbKH62eWsHu700ACshmZel5rA5YxQhKu7
+\unrestrict kn7cSJ9Es4krf7mCH9vvH5NEZ9B59UasvX6QdYvoEVw9gE5Z2CzBKx18nHXaN1H
 

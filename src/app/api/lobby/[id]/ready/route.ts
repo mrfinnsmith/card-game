@@ -11,6 +11,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (user.is_anonymous) {
+    return NextResponse.json(
+      { error: 'Invite lobbies require a registered account' },
+      { status: 403 },
+    )
+  }
+
   const { data: lobby, error: fetchError } = await supabase
     .from('cards_lobbies')
     .select('id, host_id, guest_id, host_ready, guest_ready, status')
