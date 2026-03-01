@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { endRound, isMatchOver, isRoundOver } from '@/game/stateMachine'
 import type { GameState } from '@/types/game'
 import { validateAndApply } from '@/lib/validateMove'
+import { broadcastGameState } from '@/lib/broadcastState'
+import { maskState } from '@/lib/maskState'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
@@ -67,5 +69,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   if (updateError) return NextResponse.json({ error: 'Failed to persist state' }, { status: 500 })
 
-  return NextResponse.json({ state: nextState })
+  broadcastGameState(params.id, nextState).catch(console.error)
+
+  return NextResponse.json({ ok: true, state: maskState(nextState, playerIndex) })
 }
