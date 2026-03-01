@@ -1,9 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Routes that require a registered (non-anonymous) account.
-const REGISTERED_ONLY = ['/lobby', '/stats']
-
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -32,13 +29,15 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
   const isAuthRoute = pathname === '/login' || pathname === '/register'
-  const needsRegistered = REGISTERED_ONLY.some(
-    (p) => pathname === p || pathname.startsWith(p + '/'),
-  )
+  const isPublicRoute = pathname === '/' || isAuthRoute
+  // Protect /stats, /lobby (exact), and /lobby/<id> (invite waiting room only).
+  // /lobby/<id>/select and deeper are accessible to all authenticated users (quick match).
+  const needsRegistered =
+    pathname === '/stats' || pathname === '/lobby' || /^\/lobby\/[^/]+$/.test(pathname)
   const isAnonymous = user ? (user.is_anonymous ?? false) : false
 
-  // No session at all: send to home (name entry) unless already on an auth route.
-  if (!user && !isAuthRoute) {
+  // No session at all: send to home (name entry) unless already on a public route.
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

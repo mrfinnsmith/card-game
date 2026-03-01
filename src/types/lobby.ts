@@ -8,7 +8,7 @@ export type LobbyStatus =
 
 export interface Lobby {
   id: string
-  join_code: string
+  join_code: string | null
   host_id: string
   guest_id: string | null
   host_ready: boolean

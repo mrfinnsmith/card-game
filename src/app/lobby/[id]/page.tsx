@@ -212,7 +212,7 @@ export default function WaitingRoomPage({ params }: { params: { id: string } }) 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6">
-        {isHost && (
+        {isHost && lobby.join_code && (
           <div className="text-center">
             <p className="mb-1 text-xs uppercase tracking-widest text-gray-400">Join code</p>
             <p className="font-mono text-4xl font-bold tracking-widest text-gray-900">

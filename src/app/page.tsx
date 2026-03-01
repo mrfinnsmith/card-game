@@ -1,24 +1,25 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 export default function Home() {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isRegistered, setIsRegistered] = useState<boolean | null>(null)
+  // null = loading, false = no session, true = has session
+  const [hasSession, setHasSession] = useState<boolean | null>(null)
+  const [isRegistered, setIsRegistered] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) {
-        setIsRegistered(false)
+        setHasSession(false)
         return
       }
+      setHasSession(true)
       setIsRegistered(!(user.is_anonymous ?? false))
     })
   }, [])
@@ -38,11 +39,14 @@ export default function Home() {
       setError('Something went wrong. Please try again.')
       return
     }
-    router.refresh()
+    // Anonymous users are not registered; update state directly without a full refresh.
+    setHasSession(true)
+    setIsRegistered(false)
   }
 
-  // No session yet: show name entry.
-  if (isRegistered === false) {
+  if (hasSession === null) return null
+
+  if (!hasSession) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
         <div className="w-full max-w-xs space-y-6">
@@ -85,7 +89,6 @@ export default function Home() {
     )
   }
 
-  // Has a session: show menu.
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-xs space-y-6 text-center">
@@ -103,12 +106,14 @@ export default function Home() {
           >
             Quick match
           </Link>
-          <Link
-            href="/lobby"
-            className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            Play with a friend
-          </Link>
+          {isRegistered && (
+            <Link
+              href="/lobby"
+              className="block w-full rounded-lg border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Play with a friend
+            </Link>
+          )}
         </div>
         {!isRegistered && (
           <div className="space-y-1 text-xs text-gray-400">
