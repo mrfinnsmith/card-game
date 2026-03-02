@@ -58,12 +58,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const matchOver = isMatchOver(nextState)
   const nextPlayerId = nextState.activePlayer === 0 ? lobby.host_id : lobby.guest_id
 
+  let matchResult: { winner_id: string | null; type: 'win' | 'draw' } | null = null
+  if (matchOver) {
+    const p0 = nextState.players[0].gems
+    const p1 = nextState.players[1].gems
+    if (p0 === 0 && p1 === 0) {
+      matchResult = { winner_id: null, type: 'draw' }
+    } else {
+      const winnerId = p0 === 0 ? lobby.guest_id : lobby.host_id
+      matchResult = { winner_id: winnerId, type: 'win' }
+    }
+  }
+
   const { error: updateError } = await supabase
     .from('cards_games')
     .update({
       state: nextState,
       current_player_id: nextPlayerId,
-      ...(matchOver ? { status: 'completed' } : {}),
+      ...(matchOver ? { status: 'completed', result: matchResult } : {}),
     })
     .eq('id', params.id)
 

@@ -51,6 +51,8 @@ export default function QueuePage() {
 
       if (data.waiting) {
         setWaiting(true)
+        // Reflect our own entry in the displayed count.
+        setCount((c) => (c ?? 0) + 1)
       }
     }
 
@@ -64,6 +66,13 @@ export default function QueuePage() {
     if (!waiting || !userId.current) return
 
     const uid = userId.current
+
+    function redirectIfMatched(row: QueueRow) {
+      if (row.status === 'matched' && row.lobby_id) {
+        router.push(`/lobby/${row.lobby_id}/select`)
+      }
+    }
+
     const channel = supabase
       .channel(`queue:${uid}`)
       .on(
@@ -74,16 +83,23 @@ export default function QueuePage() {
           table: 'cards_quick_match_queue',
           filter: `user_id=eq.${uid}`,
         },
-        (payload) => {
-          const row = payload.new as QueueRow
-          if (row.status === 'matched' && row.lobby_id) {
-            router.push(`/lobby/${row.lobby_id}/select`)
-          }
-        },
+        (payload) => redirectIfMatched(payload.new as QueueRow),
       )
       .subscribe()
 
+    // Polling fallback: re-attempt matching every 5s.
+    // Both browsers may have joined simultaneously and both seen an empty queue,
+    // so neither matched on entry. Re-calling POST /api/queue re-runs the matching
+    // logic and will pair them on the next poll.
+    const poll = setInterval(async () => {
+      const res = await fetch('/api/queue', { method: 'POST' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.lobby_id) router.push(`/lobby/${data.lobby_id}/select`)
+    }, 5000)
+
     return () => {
+      clearInterval(poll)
       supabase.removeChannel(channel)
     }
   }, [waiting, router, supabase])

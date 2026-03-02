@@ -23,7 +23,11 @@ function MultiplayerGameScreen({
 }: {
   gameId: string
   playerIndex: 0 | 1
-  onMatchEnd: (result: MatchResult, roundWins: [number, number]) => void
+  onMatchEnd: (
+    result: MatchResult,
+    roundWins: [number, number],
+    roundScores: [number, number][],
+  ) => void
 }) {
   const supabase = useMemo(() => createClient(), [])
   const storeApi = useGameStoreApi()
@@ -114,14 +118,15 @@ function MultiplayerGameScreen({
 
         if (isMatchOver(hydrated)) {
           const result = getMatchResult(hydrated)
-          if (result) onMatchEndRef.current(result, hydrated.roundWins)
+          if (result) onMatchEndRef.current(result, hydrated.roundWins, hydrated.roundScores ?? [])
         }
       })
       .on('broadcast', { event: 'forfeit' }, (msg) => {
         const { winner_player_index } = msg.payload as { winner_player_index: 0 | 1 }
         cancelDisconnectionTimer()
         const result: MatchResult = { winner: winner_player_index === playerIndex ? 0 : 1 }
-        onMatchEndRef.current(result, storeApi.getState().roundWins)
+        const s = storeApi.getState()
+        onMatchEndRef.current(result, s.roundWins, s.roundScores ?? [])
       })
       .on('broadcast', { event: 'ping' }, (msg) => {
         const { pi } = msg.payload as { pi: number }
@@ -184,7 +189,7 @@ function MultiplayerGameScreen({
       storeApi.setState(hydrated, true)
       if (isMatchOver(hydrated)) {
         const result = getMatchResult(hydrated)
-        if (result) onMatchEndRef.current(result, hydrated.roundWins)
+        if (result) onMatchEndRef.current(result, hydrated.roundWins, hydrated.roundScores ?? [])
       }
     }
   }
@@ -305,7 +310,15 @@ function MultiplayerGameScreen({
 
 // ---- result screen ----
 
-function ResultScreen({ result, roundWins }: { result: MatchResult; roundWins: [number, number] }) {
+function ResultScreen({
+  result,
+  roundWins,
+  roundScores,
+}: {
+  result: MatchResult
+  roundWins: [number, number]
+  roundScores: [number, number][]
+}) {
   const router = useRouter()
   const heading =
     result.winner === 0 ? 'You win!' : result.winner === 1 ? 'Opponent wins' : "It's a draw"
@@ -322,9 +335,24 @@ function ResultScreen({ result, roundWins }: { result: MatchResult; roundWins: [
             Opponent won {roundWins[1]} round{roundWins[1] !== 1 ? 's' : ''}
           </p>
         </div>
+        {roundScores.length > 0 && (
+          <div className="text-xs text-gray-400 space-y-0.5 pt-1 border-t border-gray-100">
+            {roundScores.map(([you, opp], i) => (
+              <p key={i}>
+                Round {i + 1}: {you} – {opp}
+              </p>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => router.push('/queue')}
+          className="w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+        >
+          Quick match
+        </button>
         <button
           onClick={() => router.push('/')}
-          className="w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
         >
           Back to home
         </button>
@@ -349,6 +377,7 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
   const [initialState, setInitialState] = useState<GameState | null>(null)
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null)
   const [roundWins, setRoundWins] = useState<[number, number]>([0, 0])
+  const [roundScores, setRoundScores] = useState<[number, number][]>([])
 
   useEffect(() => {
     let mounted = true
@@ -413,6 +442,7 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
           : null
         setMatchResult({ winner })
         setRoundWins(hydrated.roundWins)
+        setRoundScores(hydrated.roundScores ?? [])
         setPhase('match-result')
         return
       }
@@ -420,6 +450,7 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
       if (game.status === 'abandoned') {
         setMatchResult({ winner: null })
         setRoundWins(hydrated.roundWins)
+        setRoundScores(hydrated.roundScores ?? [])
         setPhase('match-result')
         return
       }
@@ -429,6 +460,7 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
         if (result) {
           setMatchResult(result)
           setRoundWins(hydrated.roundWins)
+          setRoundScores(hydrated.roundScores ?? [])
           setPhase('match-result')
           return
         }
@@ -443,11 +475,15 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
     }
   }, [lobbyId, router, supabase])
 
-  const handleMatchEnd = useCallback((result: MatchResult, wins: [number, number]) => {
-    setMatchResult(result)
-    setRoundWins(wins)
-    setPhase('match-result')
-  }, [])
+  const handleMatchEnd = useCallback(
+    (result: MatchResult, wins: [number, number], scores: [number, number][]) => {
+      setMatchResult(result)
+      setRoundWins(wins)
+      setRoundScores(scores)
+      setPhase('match-result')
+    },
+    [],
+  )
 
   if (phase === 'loading' && !pageError) {
     return (
@@ -471,7 +507,7 @@ export default function LobbyPlayPage({ params }: { params: { id: string } }) {
   }
 
   if (phase === 'match-result' && matchResult) {
-    return <ResultScreen result={matchResult} roundWins={roundWins} />
+    return <ResultScreen result={matchResult} roundWins={roundWins} roundScores={roundScores} />
   }
 
   if (!initialState || gameId === null || playerIndex === null) return null
