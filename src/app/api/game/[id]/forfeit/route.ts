@@ -49,7 +49,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
   await fetch(broadcastUrl, {
     method: 'POST',
     headers: {
-      apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      apikey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

@@ -9,7 +9,7 @@ import { maskState } from './maskState'
  */
 export async function broadcastGameState(gameId: string, state: GameState): Promise<void> {
   const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`
-  const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const apiKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 
   const res = await fetch(url, {
     method: 'POST',

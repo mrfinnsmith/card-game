@@ -92,7 +92,7 @@ function MultiplayerGameScreen({
       fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
         method: 'POST',
         headers: {
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
